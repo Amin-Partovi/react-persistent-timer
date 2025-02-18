@@ -1,11 +1,37 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+const IS_RUNNING_KEY = "persistent-timer-is-running";
+const START_TIME_KEY = "persistent-timer-is-start-time";
 
-export function usePersistentTimer(durationMs) {
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const workerRef = useRef(null);
+export enum Actions {
+  start,
+  update,
+  done,
+  pause,
+  reset,
+}
+
+export function usePersistentTimer(duration: number) {
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [isRunning, setIsRunning] = useState<boolean>(false);
+  const workerRef = useRef<Worker>(null);
+
+  useLayoutEffect(() => {
+    setIsRunning(localStorage.getItem(IS_RUNNING_KEY) === "true");
+  }, []);
+
+  useEffect(() => {
+    if (isRunning) {
+      workerRef.current?.postMessage({
+        action: Actions.start,
+        duration,
+        startTime: localStorage.getItem(START_TIME_KEY)
+          ? localStorage.getItem(START_TIME_KEY)
+          : Date.now(),
+      });
+    }
+  }, [isRunning]);
 
   useEffect(() => {
     workerRef.current = new Worker(
@@ -13,36 +39,45 @@ export function usePersistentTimer(durationMs) {
     );
 
     workerRef.current.onmessage = (e) => {
-      if (e.data.type === "update") {
+      if (e.data.type === Actions.update) {
         setElapsedTime(e.data.elapsed);
-      } else if (e.data.type === "done") {
+      } else if (e.data.type === Actions.done) {
+        console.log("done");
         setIsRunning(false);
+        localStorage.removeItem(IS_RUNNING_KEY);
+        localStorage.removeItem(START_TIME_KEY);
       }
     };
 
     return () => {
-      workerRef.current.terminate();
+      workerRef.current?.terminate();
     };
   }, []);
 
   const start = () => {
-    workerRef.current.postMessage({
-      action: "start",
-      duration: durationMs,
-      elapsed: elapsedTime,
+    const startTime = Date.now();
+    localStorage.setItem(IS_RUNNING_KEY, "true");
+    localStorage.setItem(START_TIME_KEY, startTime.toString());
+    workerRef.current?.postMessage({
+      action: Actions.start,
+      duration,
+      startTime,
     });
     setIsRunning(true);
   };
 
   const pause = () => {
-    workerRef.current.postMessage({ action: "pause" });
+    workerRef.current?.postMessage({ action: Actions.pause });
     setIsRunning(false);
+    localStorage.setItem(IS_RUNNING_KEY, "false");
   };
 
   const reset = () => {
-    workerRef.current.postMessage({ action: "reset" });
+    workerRef.current?.postMessage({ action: Actions.reset });
     setElapsedTime(0);
     setIsRunning(false);
+    localStorage.removeItem(IS_RUNNING_KEY);
+    localStorage.removeItem(START_TIME_KEY);
   };
 
   return { elapsedTime, isRunning, start, pause, reset };
