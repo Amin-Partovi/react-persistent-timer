@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useLayoutEffect } from "react";
+
 const IS_RUNNING_KEY = "persistent-timer-is-running";
-const START_TIME_KEY = "persistent-timer-is-start-time";
+const START_TIME_KEY = "persistent-timer-start-time";
 
 export enum Actions {
   start,
@@ -12,7 +13,12 @@ export enum Actions {
   reset,
 }
 
-export function usePersistentTimer(duration: number) {
+interface Props {
+  duration: number;
+  frequency: "s" | "cs" | "ms";
+}
+
+export function usePersistentTimer({ duration, frequency }: Props) {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const workerRef = useRef<Worker>(null);
@@ -22,8 +28,9 @@ export function usePersistentTimer(duration: number) {
   }, []);
 
   useEffect(() => {
-    if (isRunning) {
+    if (isRunning && frequency) {
       workerRef.current?.postMessage({
+        frequency,
         action: Actions.start,
         duration,
         startTime: localStorage.getItem(START_TIME_KEY)
@@ -31,7 +38,7 @@ export function usePersistentTimer(duration: number) {
           : Date.now(),
       });
     }
-  }, [isRunning]);
+  }, [isRunning, frequency]);
 
   useEffect(() => {
     workerRef.current = new Worker(
@@ -42,7 +49,6 @@ export function usePersistentTimer(duration: number) {
       if (e.data.type === Actions.update) {
         setElapsedTime(e.data.elapsed);
       } else if (e.data.type === Actions.done) {
-        console.log("done");
         setIsRunning(false);
         localStorage.removeItem(IS_RUNNING_KEY);
         localStorage.removeItem(START_TIME_KEY);
