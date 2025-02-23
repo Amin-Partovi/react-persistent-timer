@@ -16,15 +16,19 @@ export enum Actions {
 interface Props {
   duration: number;
   frequency: "s" | "cs" | "ms";
+  key: string;
 }
 
-export function usePersistentTimer({ duration, frequency }: Props) {
+function usePersistentTimer({ duration, frequency, key }: Props) {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const workerRef = useRef<Worker>(null);
 
+  const isRunningKey = IS_RUNNING_KEY + "-" + key;
+  const startTimeKey = START_TIME_KEY + "-" + key;
+
   useLayoutEffect(() => {
-    setIsRunning(localStorage.getItem(IS_RUNNING_KEY) === "true");
+    setIsRunning(localStorage.getItem(isRunningKey) === "true");
   }, []);
 
   useEffect(() => {
@@ -33,8 +37,8 @@ export function usePersistentTimer({ duration, frequency }: Props) {
         frequency,
         action: Actions.start,
         duration,
-        startTime: localStorage.getItem(START_TIME_KEY)
-          ? localStorage.getItem(START_TIME_KEY)
+        startTime: localStorage.getItem(startTimeKey)
+          ? localStorage.getItem(startTimeKey)
           : Date.now(),
       });
     }
@@ -50,8 +54,8 @@ export function usePersistentTimer({ duration, frequency }: Props) {
         setElapsedTime(e.data.elapsed);
       } else if (e.data.type === Actions.done) {
         setIsRunning(false);
-        localStorage.removeItem(IS_RUNNING_KEY);
-        localStorage.removeItem(START_TIME_KEY);
+        localStorage.removeItem(isRunningKey);
+        localStorage.removeItem(startTimeKey);
       }
     };
 
@@ -62,8 +66,8 @@ export function usePersistentTimer({ duration, frequency }: Props) {
 
   const start = () => {
     const startTime = Date.now();
-    localStorage.setItem(IS_RUNNING_KEY, "true");
-    localStorage.setItem(START_TIME_KEY, startTime.toString());
+    localStorage.setItem(isRunningKey, "true");
+    localStorage.setItem(startTimeKey, startTime.toString());
     workerRef.current?.postMessage({
       action: Actions.start,
       duration,
@@ -75,16 +79,18 @@ export function usePersistentTimer({ duration, frequency }: Props) {
   const pause = () => {
     workerRef.current?.postMessage({ action: Actions.pause });
     setIsRunning(false);
-    localStorage.setItem(IS_RUNNING_KEY, "false");
+    localStorage.setItem(isRunningKey, "false");
   };
 
   const reset = () => {
     workerRef.current?.postMessage({ action: Actions.reset });
     setElapsedTime(0);
     setIsRunning(false);
-    localStorage.removeItem(IS_RUNNING_KEY);
-    localStorage.removeItem(START_TIME_KEY);
+    localStorage.removeItem(isRunningKey);
+    localStorage.removeItem(startTimeKey);
   };
 
   return { elapsedTime, isRunning, start, pause, reset };
 }
+
+export default usePersistentTimer;
